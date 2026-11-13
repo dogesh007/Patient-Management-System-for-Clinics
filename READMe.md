@@ -7,7 +7,7 @@ This upgraded version replaces basic linear arrays with advanced data structures
 ##  Key Features
 
 *   **Dynamic Clinic Scaling:** Configure the total number of doctors, normal queue capacity, and emergency queue capacity on the fly without recompiling.
-*   **"Code Blue" Protocol (Severity 6):** A new emergency tier for life-threatening cases (e.g., heart attacks) that bypasses all capacity limits and forcefully interrupts the doctor treating the least severe patient.
+*   **"Code RED" Protocol (Severity 6):** A new emergency tier for life-threatening cases (e.g., heart attacks) that bypasses all capacity limits and forcefully interrupts the doctor treating the least severe patient.
 *   **Nested Preemption (LIFO Pausing):** If a doctor is treating a severe patient and gets interrupted by a Code Blue, the previous patient is pushed to a pause stack. Once the Code Blue is resolved, the doctor automatically resumes the paused patient.
 *   **Dual Priority Queues:**
     *   *Normal Queue:* Standard First-In, First-Out (FIFO) for Severities 1–3.
