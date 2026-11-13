@@ -29,7 +29,7 @@ This upgraded version replaces basic linear arrays with advanced data structures
 | :--- | :--- | :--- | :--- |
 | **1 - 3** | Normal / Minor | Normal Queue | FIFO processing. Subject to normal capacity limits. |
 | **4 - 5** | Emergency | Emergency Queue | Prioritized sorting. Severity 5 can preempt normal consultations. |
-| **6** | **CODE BLUE** | Emergency Queue | Ignores capacity limits. Instantly preempts the lowest-severity active consultation. |
+| **6** | **CODE RED** | Emergency Queue | Ignores capacity limits. Instantly preempts the lowest-severity active consultation. |
 
 ##  How to Build and Run
 
