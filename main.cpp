@@ -1,163 +1,202 @@
 #include <iostream>
 #include <vector>
 #include <queue>
+#include <stack>
+#include <unordered_map>
+#include <set>
 #include <string>
 #include <ctime>
 
 using namespace std;
 
-const int MAX_NORMAL = 20;
-const int MAX_EMERGENCY = 5;
-
+// stats
 const int NORMAL = 1, EMERGENCY = 2, TREATING = 3, PAUSED = 4, COMPLETED = 5, REFERRED = 6, DEFERRED = 7;
 
-struct Patient {
+struct Patient 
+{
     int id, age, severity, status, doctor;
     string name, problem;
     time_t arrival;
 };
 
-vector<Patient> patients;
+unordered_map<int, Patient> patientsDB;
 queue<int> normalQueue;
-vector<int> emergencyQueue;
-int currentPatient[2] = {-1, -1};
-int pausedPatient[2] = {-1, -1};
 
-int readInt(string msg, int low, int high) {
-    int x; cout << msg; cin >> x; return x;
-}
-
-int findPatient(int id) {
-    for (int i = 0; i < patients.size(); i++) {
-        if (patients[i].id == id) return i;
-    }
-    return -1;
-}
-
-string getStatus(int s) 
+struct EmgItem 
 {
-    if (s == NORMAL) return "Normal Waiting";
-    if (s == EMERGENCY) return "Emergency Waiting";
-    if (s == TREATING) return "In Consultation";
-    if (s == PAUSED) return "Paused";
-    if (s == COMPLETED) return "Completed";
-    if (s == REFERRED) return "Referred";
-    return "Deferred";
-}
-
-int waitingTime(int id) {
-    int i = findPatient(id);
-    return (i == -1) ? 0 : (int)(difftime(time(0), patients[i].arrival) / 60);
-}
-
-int getTopEmergencyIndex() {
-    if (emergencyQueue.empty()) return -1;
-    int bestIdx = 0;
-    for (int i = 1; i < emergencyQueue.size(); i++) {
-        int curr = findPatient(emergencyQueue[i]), best = findPatient(emergencyQueue[bestIdx]);
-        if (patients[curr].severity > patients[best].severity || 
-           (patients[curr].severity == patients[best].severity && patients[curr].id < patients[best].id)) 
-           {
-            bestIdx = i;
-        }
+    int id;
+    int severity;
+    time_t arrival;
+    
+   
+    bool operator<(const EmgItem& other) const {
+        if (severity != other.severity) return severity > other.severity; 
+        if (arrival != other.arrival) return arrival < other.arrival;
+        return id < other.id;
     }
-    return bestIdx;
-}
+};
+set<EmgItem> emergencyQueue;
 
-void addToQueue(int id) {
-    int i = findPatient(id);
-    if (i == -1) return;
+vector<stack<int>> pausedPatients;
+vector<int> currentPatient; 
 
-    if (patients[i].severity >= 4) {
-        if (emergencyQueue.size() >= MAX_EMERGENCY) 
-        {
-            patients[i].status = DEFERRED;
-            cout << "Emergency queue full!\n";
-            return;
-        }
-        emergencyQueue.push_back(id);
-        patients[i].status = EMERGENCY;
-        cout << "Added to emergency queue.\n";
-    }
-     else
-      {
-        if (normalQueue.size() >= MAX_NORMAL)
-         {
-            patients[i].status = DEFERRED;
-            cout << "Normal queue full.\n";
-            return;
-        }
-        normalQueue.push(id);
-        patients[i].status = NORMAL;
-        cout << "Added to normal queue.\n";
-    }
-}
+int numDoctors = 2;
+int maxNormal = 20;
+int maxEmergency = 5;
+int patientIdCounter = 101;
 
-void schedule() {
-    for (int d = 0; d < 2; d++) 
+int readInt(string msg, int low, int high) 
+{
+    int x; 
+    while (true) 
     {
-        if (currentPatient[d] != -1) continue;
-        int id = -1;
+        cout << msg;
+        if (cin >> x && x >= low && x <= high) break;
+        cout << "Invalid input. Please enter a number between " << low << " and " << high << ".\n";
+        cin.clear();
+        cin.ignore(10000, '\n');
+    }
+    return x;
+}
 
-        if (!emergencyQueue.empty()) {
-            int idx = getTopEmergencyIndex();
-            id = emergencyQueue[idx];
-            emergencyQueue.erase(emergencyQueue.begin() + idx);
+string getStatus(int s)
+ {
+    switch(s)
+    {
+        case NORMAL: return "Normal Waiting";
+        case EMERGENCY: return "Emergency Waiting";
+        case TREATING: return "In Consultation";
+        case PAUSED: return "Paused";
+        case COMPLETED: return "Completed";
+        case REFERRED: return "Referred";
+        default: return "Deferred";
+    }
+}
+
+int waitingTime(int id)
+{
+    if (patientsDB.find(id) == patientsDB.end()) return 0;
+    return (int)(difftime(time(0), patientsDB[id].arrival) / 60);
+}
+
+void schedule() 
+{
+    for (int d = 0; d < numDoctors; d++) 
+    {
+        if (currentPatient[d] != -1) continue;   
+        
+        int id = -1;
+        if (!emergencyQueue.empty()) 
+        {
+            auto topEmg = emergencyQueue.begin();
+            id = topEmg->id;
+            emergencyQueue.erase(topEmg);
         } 
-        else if (!normalQueue.empty()) {
+        else if (!normalQueue.empty()) 
+        {
             id = normalQueue.front();
             normalQueue.pop();
         }
 
         if (id == -1) continue;
-        int i = findPatient(id);
-        patients[i].status = TREATING;
-        patients[i].doctor = d + 1;
+
+        patientsDB[id].status = TREATING;
+        patientsDB[id].doctor = d + 1;
         currentPatient[d] = id;
-        cout << "\nDoctor " << d + 1 << " treating " << patients[i].name << " (Wait: " << waitingTime(id) << "m)\n";
+        cout << "\n[SCHEDULE] Doctor " << d + 1 << " is now treating " << patientsDB[id].name 
+             << " (Wait: " << waitingTime(id) << "m)\n";
     }
 }
 
-void preempt() {
-    if (emergencyQueue.empty()) return;
-    int idx = getTopEmergencyIndex(), id = emergencyQueue[idx], i = findPatient(id);
-    if (patients[i].severity != 5) return;
+void preempt(int id) 
+{
+    int severity = patientsDB[id].severity;
+    cout << "\n!!! CRITICAL PREEMPTION PROTOCOL INITIATED for " << patientsDB[id].name << " !!!\n";
     
-    cout << "\nCRITICAL PATIENT: " << patients[i].name << "\n";
-    for (int d = 0; d < 2; d++) {
+    // checking doctor is free or not
+    for (int d = 0; d < numDoctors; d++) 
+    {
         if (currentPatient[d] == -1) 
-        { schedule();
-           return; }
+        { 
+            schedule(); 
+            return; 
+        }
     }
 
-    cout << "Current doctors:\n";
-    for (int d = 0; d < 2; d++) {
-        int j = findPatient(currentPatient[d]);
-        cout << d + 1 << ". " << patients[j].name << " (S" << patients[j].severity << ")\n";
+   
+    int targetDoc = -1;
+    int lowestSeverity = 10;
+    
+    for (int d = 0; d < numDoctors; d++) 
+    {
+        int currentTreatedId = currentPatient[d];
+        int currentSev = patientsDB[currentTreatedId].severity;
+        
+        if (currentSev < lowestSeverity && currentSev < severity) 
+        {
+            lowestSeverity = currentSev;
+            targetDoc = d;
+        }
     }
 
-    int d = readInt("Doctor to interrupt (0 to cancel): ", 0, 2);
-    if (d == 0) return;
-    d--;
-
-    int oldID = currentPatient[d], old = findPatient(oldID);
-    if (pausedPatient[d] != -1 || patients[old].severity == 5 || readInt("Staff approves? (1/0): ", 0, 1) == 0) {
-        cout << "Interruption denied/cancelled.\n";
+    if (targetDoc == -1) 
+    {
+        cout << "All doctors are handling equally or more critical cases. " << patientsDB[id].name << " remains queued.\n";
         return;
     }
 
-    pausedPatient[d] = oldID;
-    patients[old].status = PAUSED;
-    emergencyQueue.erase(emergencyQueue.begin() + idx);
-    currentPatient[d] = id;
-    patients[i].status = TREATING;
-    patients[i].doctor = d + 1;
-    cout << patients[old].name << " paused. Emergency assigned to Doc " << d + 1 << "\n";
+    int oldID = currentPatient[targetDoc];
+    pausedPatients[targetDoc].push(oldID); 
+    patientsDB[oldID].status = PAUSED;
+    
+    // remove critical pat.
+    EmgItem targetItem = {id, severity, patientsDB[id].arrival};
+    emergencyQueue.erase(targetItem);
+    
+    // new pat.
+    currentPatient[targetDoc] = id;
+    patientsDB[id].status = TREATING;
+    patientsDB[id].doctor = targetDoc + 1;
+    
+    cout << ">> " << patientsDB[oldID].name << " paused! Doctor " << targetDoc + 1 
+         << " taken over by " << patientsDB[id].name << "\n";
 }
 
-void registerPatient() {
+void addToQueue(int id) 
+{
+    if (patientsDB.find(id) == patientsDB.end()) return;
+    Patient& p = patientsDB[id];
+
+    if (p.severity >= 4) 
+    {
+        if (p.severity < 6 && emergencyQueue.size() >= maxEmergency) 
+        {
+            p.status = DEFERRED;
+            cout << "Emergency queue full! Patient deferred.\n";
+            return;
+        }
+        emergencyQueue.insert({id, p.severity, p.arrival}); 
+        p.status = EMERGENCY;
+        cout << "Added to Emergency Queue.\n";
+    } 
+    else 
+    {
+        if (normalQueue.size() >= maxNormal) 
+        {
+            p.status = DEFERRED;
+            cout << "Normal queue full. Patient deferred.\n";
+            return;
+        }
+        normalQueue.push(id); 
+        p.status = NORMAL;
+        cout << "Added to Normal Queue.\n";
+    }
+}
+
+void registerPatient() 
+{
     Patient p;
-    p.id = 101 + patients.size();
+    p.id = patientIdCounter++;
     p.doctor = -1;
     p.arrival = time(0);
 
@@ -166,136 +205,147 @@ void registerPatient() {
     p.age = readInt("Age: ", 0, 120);
     cout << "Problem: ";
     cin.ignore(); getline(cin, p.problem);
-    p.severity = readInt("Severity (1-5): ", 1, 5);
+    
+    cout << "Severity Scale:\n1-3: Normal\n4-5: Emergency\n6: CODE BLUE (Heart Attack, Stroke, etc.)\n";
+    p.severity = readInt("Severity (1-6): ", 1, 6);
     p.status = DEFERRED;
-    patients.push_back(p);
+    
+    patientsDB[p.id] = p; 
     cout << "Registered! ID: " << p.id << "\n";
 
     addToQueue(p.id);
     schedule();
-    if (patients[findPatient(p.id)].status == EMERGENCY && p.severity == 5) preempt();
+    
+    if ((p.severity == 5 || p.severity == 6) && patientsDB[p.id].status == EMERGENCY) preempt(p.id);
+    
 }
 
-void removeFromQueue(int id, int status) {
-    if (status == NORMAL) {
+void updateSeverity() 
+{
+    int id = readInt("Patient ID: ", 101, patientIdCounter - 1);
+    if (patientsDB.find(id) == patientsDB.end() || patientsDB[id].status >= COMPLETED) 
+    { 
+        cout << "Invalid or closed patient.\n"; 
+        return; 
+    }
+
+    Patient& p = patientsDB[id];
+    int oldStatus = p.status;
+    
+    if (oldStatus == NORMAL) 
+    {
         queue<int> temp;
-        while (!normalQueue.empty()) {
-            int x = normalQueue.front(); normalQueue.pop();
-            if (x != id) temp.push(x);
+        while (!normalQueue.empty()) 
+        {
+            if (normalQueue.front() != id) temp.push(normalQueue.front());
+            normalQueue.pop();
         }
         normalQueue = temp;
-    } else if (status == EMERGENCY) {
-        for (auto it = emergencyQueue.begin(); it != emergencyQueue.end(); ++it) {
-            if (*it == id) { emergencyQueue.erase(it); break; }
-        }
+    } else if (oldStatus == EMERGENCY) 
+    {
+        emergencyQueue.erase({id, p.severity, p.arrival}); 
     }
-}
-
-void updateSeverity() {
-    int id = readInt("Patient ID: ", 1, 1000000);
-    int i = findPatient(id);
-    if (i == -1 || patients[i].status >= COMPLETED) { cout << "Invalid or closed patient.\n"; return; }
-
-    int oldStatus = patients[i].status;
-    if (oldStatus == NORMAL || oldStatus == EMERGENCY) removeFromQueue(id, oldStatus);
     
-    patients[i].severity = readInt("New severity (1-5): ", 1, 5);
-
-    // Simplified condition: if treating/paused, don't re-queue automatically. Otherwise re-queue.
-    if (oldStatus == TREATING || oldStatus == PAUSED) {
-        cout << "Severity updated. Inform doctor manually.\n";
-    } else {
+    p.severity = readInt("New severity (1-6): ", 1, 6);
+    if (oldStatus == TREATING || oldStatus == PAUSED) 
+    {
+        cout << "Severity updated for patient currently in consultation/paused.\n";
+    } 
+    else 
+    {
         addToQueue(id);
         schedule();
-        if (patients[i].status == EMERGENCY && patients[i].severity == 5) preempt();
+        if ((p.severity == 5 || p.severity == 6) && p.status == EMERGENCY) preempt(id);
     }
 }
 
-void finishConsultation() {
-    int d = readInt("Doctor number (1-2): ", 1, 2) - 1;
-    if (currentPatient[d] == -1) { cout << "Doctor is free.\n"; return; }
+void finishConsultation() 
+{
+    int d = readInt("Doctor number: ", 1, numDoctors) - 1;
+    if (currentPatient[d] == -1) 
+    { 
+        cout << "Doctor is free.\n"; return; 
+    }
 
-    int id = currentPatient[d], i = findPatient(id);
+    int id = currentPatient[d];
     int choice = readInt("1. Complete  2. Refer: ", 1, 2);
-    patients[i].status = (choice == 1) ? COMPLETED : REFERRED;
-    patients[i].doctor = -1;
+    patientsDB[id].status = (choice == 1) ? COMPLETED : REFERRED;
+    patientsDB[id].doctor = -1;
     currentPatient[d] = -1;
 
-    if (pausedPatient[d] != -1 && readInt("Resume paused patient? (1/0): ", 0, 1) == 1) {
-        int old = findPatient(pausedPatient[d]);
-        currentPatient[d] = pausedPatient[d];
-        pausedPatient[d] = -1;
-        patients[old].status = TREATING;
-        cout << "Resumed " << patients[old].name << "\n";
+    if (!pausedPatients[d].empty()) 
+    {
+        int old = pausedPatients[d].top();
+        pausedPatients[d].pop(); 
+        currentPatient[d] = old;
+        patientsDB[old].status = TREATING;
+        cout << ">> Doctor " << d + 1 << " automatically resumed " << patientsDB[old].name << "\n";
     }
     schedule();
 }
 
-void resumePatient() {
-    int d = readInt("Doctor number (1-2): ", 1, 2) - 1;
-    if (pausedPatient[d] == -1 || currentPatient[d] != -1) { cout << "Cannot resume.\n"; return; }
+void configureClinic() 
+{
+    cout << "\n=== DYNAMIC CLINIC CONFIGURATION ===\n";
+    numDoctors = readInt("Enter number of doctors: ", 1, 50);
+    maxNormal = readInt("Enter normal queue capacity: ", 1, 1000);
+    maxEmergency = readInt("Enter emergency queue capacity: ", 1, 1000);
     
-    int i = findPatient(pausedPatient[d]);
-    currentPatient[d] = pausedPatient[d];
-    pausedPatient[d] = -1;
-    patients[i].status = TREATING;
-    cout << "Resumed " << patients[i].name << "\n";
+    currentPatient.assign(numDoctors, -1);
+    pausedPatients.assign(numDoctors, stack<int>());
+    cout << "Clinic dynamically reconfigured!\n";
 }
 
-void searchPatient() {
-    int id = readInt("Patient ID: ", 1, 1000000);
-    int i = findPatient(id);
-    if (i == -1) { cout << "Not found.\n"; return; }
-
-    Patient p = patients[i];
-    cout << "\nID: " << p.id << "\nName: " << p.name << "\nAge: " << p.age 
-         << "\nProblem: " << p.problem << "\nSeverity: " << p.severity 
-         << "\nStatus: " << getStatus(p.status) << "\nDoctor: " << p.doctor 
-         << "\nWait time: " << waitingTime(id) << " mins\n";
-}
-
-void displayQueues() {
-    cout << "\n--- NORMAL QUEUE ---\n";
-    queue<int> nq = normalQueue;
-    while (!nq.empty()) {
-        int id = nq.front(); nq.pop(); int i = findPatient(id);
-        cout << id << ". " << patients[i].name << " (S" << patients[i].severity << ")\n";
+void searchPatient() 
+{
+    int id = readInt("Patient ID: ", 101, patientIdCounter - 1);
+    if (patientsDB.find(id) == patientsDB.end()) 
+    { 
+        cout << "Not found.\n"; 
+        return; 
     }
 
-    cout << "\n--- EMERGENCY QUEUE ---\n";
-    for (int id : emergencyQueue) {
-        int i = findPatient(id);
-        cout << id << ". " << patients[i].name << " (S" << patients[i].severity << ")\n";
-    }
-    cout << "Capacity -> Normal: " << normalQueue.size() << "/" << MAX_NORMAL 
-         << ", Emergency: " << emergencyQueue.size() << "/" << MAX_EMERGENCY << "\n";
+    Patient p = patientsDB[id];
+    cout << "\nID: " << p.id << "\nName: " << p.name << "\nSeverity: " << p.severity 
+         << "\nStatus: " << getStatus(p.status) << "\nWait time: " << waitingTime(id) << " mins\n";
 }
 
-void displayDoctors() {
-    for (int d = 0; d < 2; d++) {
+void displayDashboard() 
+{
+    cout << "\n=== CLINIC DASHBOARD ===\n";
+    for (int d = 0; d < numDoctors; d++) 
+    {
         cout << "Doctor " << d + 1 << ": ";
         if (currentPatient[d] == -1) cout << "Free";
-        else cout << "Treating " << patients[findPatient(currentPatient[d])].name;
-        if (pausedPatient[d] != -1) cout << " [Paused: " << patients[findPatient(pausedPatient[d])].name << "]";
+        else cout << "Treating " << patientsDB[currentPatient[d]].name;
+        
+        if (!pausedPatients[d].empty()) cout << " [" << pausedPatients[d].size() << " patient(s) on pause stack]";
         cout << "\n";
+    }
+    cout << "\nEmergency Queue (" << emergencyQueue.size() << "/" << maxEmergency << "):\n";
+    for (auto it = emergencyQueue.begin(); it != emergencyQueue.end(); ++it) 
+    {
+        cout << it->id << ". " << patientsDB[it->id].name << " (S" << it->severity << ")\n";
     }
 }
 
-int main() {
-    while (true) {
+int main() 
+{
+    configureClinic(); // imp. for changeing values dynm.
+    
+    while (true) 
+    {
         cout << "\n=== CLINIC MENU ===\n"
-             << "1. Register\n2. Search\n3. Queues\n4. Doctors\n"
-             << "5. Update Severity\n6. Finish\n7. Preempt\n8. Resume\n9. Exit\n";
-        int choice = readInt("Choice: ", 1, 9);
+             << "1. Register Patient\n2. View Dashboard\n3. Update Severity\n"
+             << "4. Finish Consultation\n5. Search Patient\n6. System Settings\n7. Exit\n";
+        int choice = readInt("Choice: ", 1, 7);
         if (choice == 1) registerPatient();
-        else if (choice == 2) searchPatient();
-        else if (choice == 3) displayQueues();
-        else if (choice == 4) displayDoctors();
-        else if (choice == 5) updateSeverity();
-        else if (choice == 6) finishConsultation();
-        else if (choice == 7) preempt();
-        else if (choice == 8) resumePatient();
-        else if (choice == 9) break;
+        else if (choice == 2) displayDashboard();
+        else if (choice == 3) updateSeverity();
+        else if (choice == 4) finishConsultation();
+        else if (choice == 5) searchPatient();
+        else if (choice == 6) configureClinic();
+        else if (choice == 7) break;
     }
     return 0;
 }
