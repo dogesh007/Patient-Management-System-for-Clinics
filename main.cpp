@@ -206,7 +206,7 @@ void registerPatient()
     cout << "Problem: ";
     cin.ignore(); getline(cin, p.problem);
     
-    cout << "Severity Scale:\n1-3: Normal\n4-5: Emergency\n6: CODE BLUE (Heart Attack, Stroke, etc.)\n";
+    cout << "Severity Scale:\n1-3: Normal\n4-5: Emergency\n6: CODE RED (Heart Attack, Stroke, etc.)\n";
     p.severity = readInt("Severity (1-6): ", 1, 6);
     p.status = DEFERRED;
     
